@@ -33,7 +33,14 @@ class SearchResult:
 class BGERetriever:
     def __init__(self, dataset_name: str, device: str = None):
         self.dataset_name = dataset_name
-        self.device = device if device else ("cuda" if torch.cuda.is_available() else "cpu")
+        if device:
+            self.device = device
+        elif torch.cuda.is_available():
+            self.device = "cuda"
+        elif torch.backends.mps.is_available():
+            self.device = "mps"
+        else:
+            self.device = "cpu"
         self.model = None
         self.index = None
         self.corpus = None
@@ -417,7 +424,7 @@ def main():
     parser = argparse.ArgumentParser(description="Chạy Baseline BGE-M3")
     parser.add_argument("--output-dir", type=str, default="./results_bge")
     parser.add_argument("--dataset", type=str, default="manhngvu/cord19_chunked_300_words")
-    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--batch-size", type=int, default=32)
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
