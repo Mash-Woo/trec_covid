@@ -6,16 +6,15 @@ from typing import List, Dict, Optional
 import pandas as pd
 import torch
 import faiss
+import os
 from sentence_transformers import SentenceTransformer
 from datasets import load_dataset
-import pandas as pd
-import os
 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger("BGE-M3-Baseline")
+logger = logging.getLogger("BGE-M3-Pro")
 
 @dataclass
 class ExperimentConfig:
@@ -41,6 +40,7 @@ class BGERetriever:
             self.device = "mps"
         else:
             self.device = "cpu"
+            
         self.model = None
         self.index = None
         self.corpus = None
@@ -49,7 +49,11 @@ class BGERetriever:
 
     def load_model(self):
         logger.info(f"Đang tải BAAI/bge-m3 trên thiết bị: {self.device}...")
-        self.model = SentenceTransformer('BAAI/bge-m3', device=self.device)
+        self.model = SentenceTransformer(
+            'BAAI/bge-m3', 
+            device=self.device,
+            # model_kwargs={"use_safetensors": True}
+        )
         logger.info("Load BGE-M3 thành công!")
 
     def load_data(self):
@@ -62,8 +66,8 @@ class BGERetriever:
         self.doc_ids = data["doc_id"]
         logger.info(f"Load {len(self.corpus)} văn bản.")
 
-    def build_index(self, batch_size=4):
-        logger.info("Đang mã hóa (Encoding) Corpus...")
+    def build_index(self, batch_size=32):
+        logger.info(f"Đang mã hóa (Encoding) Corpus với batch_size={batch_size}...")
         embeddings = self.model.encode(
             self.corpus,
             batch_size=batch_size, 
@@ -74,14 +78,29 @@ class BGERetriever:
 
         logger.info("Building FAISS Index...")
         d = embeddings.shape[1]
-        self.index = faiss.IndexFlatIP(d) # Inner Product = Cosine
+        self.index = faiss.IndexFlatIP(d) # Inner Product = Cosine Similarity
+        self.index.add(embeddings)
         logger.info(f"Index xong {self.index.ntotal} vector.")
 
+    def save_index(self, index_path):
+        if self.index:
+            logger.info(f"Đang lưu Index xuống file: {index_path}...")
+            faiss.write_index(self.index, index_path)
+            logger.info("Lưu Index thành công!")
+
+    def load_index(self, index_path):
+        if os.path.exists(index_path):
+            logger.info(f"Tìm thấy file index cũ: {index_path}. Đang load...")
+            self.index = faiss.read_index(index_path)
+            logger.info(f"Load xong {self.index.ntotal} vector từ đĩa. BỎ QUA encode!")
+            return True
+        return False
+
     def search(self, query: str, top_k: int = 5) -> List[SearchResult]:
-        # Encode Query
+        if self.index is None:
+            raise ValueError("Index chưa được build hoặc load!")
+            
         q_emb = self.model.encode([query], convert_to_numpy=True, normalize_embeddings=True)
-        
-        # Search FAISS
         scores, indices = self.index.search(q_emb, top_k)
         
         results = []
@@ -338,61 +357,36 @@ class ExperimentRunner:
     ]
 
     EXPERIMENT_CONFIGS = [
+        # Config Balanced
         ExperimentConfig(
-            name="baseline_rrf60",
-            weights={"query": 1.0, "question": 2.5, "narrative": 0.7},
-            top_k={"query": 200, "question": 300, "narrative": 500},
-            rrf_k=60
-        ),
-        ExperimentConfig(
-            name="rrf20",
-            weights={"query": 1.0, "question": 2.5, "narrative": 0.7},
-            top_k={"query": 200, "question": 300, "narrative": 500},
-            rrf_k=20
-        ),
-        ExperimentConfig(
-            name="rrf100",
-            weights={"query": 1.0, "question": 2.5, "narrative": 0.7},
-            top_k={"query": 200, "question": 300, "narrative": 500},
-            rrf_k=100
-        ),
-        ExperimentConfig(
-            name="question_strict",
-            weights={"query": 0.8, "question": 3.5, "narrative": 0.2},
-            top_k={"query": 150, "question": 400, "narrative": 100},
-            rrf_k=30
-        ),
-        ExperimentConfig(
-            name="question_soft",
+            name="bge_optimized_v3",
             weights={"query": 1.0, "question": 3.0, "narrative": 0.3},
             top_k={"query": 150, "question": 400, "narrative": 150},
             rrf_k=80
         ),
-        ExperimentConfig(
-            name="narrative_recall",
-            weights={"query": 1.0, "question": 2.5, "narrative": 0.15},
-            top_k={"query": 200, "question": 300, "narrative": 800},
-            rrf_k=80
-        ),
-        ExperimentConfig(
-            name="anti_noise",
-            weights={"query": 1.0, "question": 2.5, "narrative": 0.1},
-            top_k={"query": 200, "question": 300, "narrative": 100},
-            rrf_k=120
-        ),
-        ExperimentConfig(
-            name="minimal",
-            weights={"query": 1.0, "question": 3.0, "narrative": 0.0},
-            top_k={"query": 200, "question": 300, "narrative": 0},
-            rrf_k=60
-        ),
+        
+        # Config Baseline
+        # ExperimentConfig(
+        #     name="baseline_old",
+        #     weights={"query": 1.0, "question": 3.0, "narrative": 0.3},
+        #     top_k={"query": 150, "question": 400, "narrative": 150},
+        #     rrf_k=80
+        # ),
+        
+        # # Config focus on Narrative
+        # ExperimentConfig(
+        #     name="narrative_focus",
+        #     weights={"query": 0.5, "question": 1.0, "narrative": 3.0},
+        #     top_k={"query": 100, "question": 100, "narrative": 500},
+        #     rrf_k=60
+        # )
     ]
     
     def __init__(self, retriever: BGERetriever):
         self.retriever = retriever
 
     def run_experiment(self, config: ExperimentConfig, output_dir: str):
-        logger.info(f"Chạy thí nghiệm: {config.name}")
+        logger.info(f"🚀 Đang chạy thí nghiệm: {config.name}")
         rows = []
         
         for item in self.TOPIC_DATA:
@@ -418,26 +412,37 @@ class ExperimentRunner:
         df = pd.DataFrame(rows)
         output_file = f"{output_dir}/submission_BGE_{config.name}.csv"
         df.to_csv(output_file, index=False)
-        logger.info(f"Đã lưu kết quả tại: {output_file}")
+        logger.info(f"🎉 Xong! Kết quả tại: {output_file}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Chạy Baseline BGE-M3")
+    parser = argparse.ArgumentParser(description="Chạy BGE-M3 với Save/Load Index")
     parser.add_argument("--output-dir", type=str, default="./results_bge")
     parser.add_argument("--dataset", type=str, default="manhngvu/cord19_chunked_300_words")
     parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--index-file", type=str, default="data/bge_m3_cord19.index")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
+    
     retriever = BGERetriever(args.dataset)
-    retriever.load_model()
-    retriever.load_data()
-    retriever.build_index(batch_size=args.batch_size)
+    retriever.load_data() # Load text
+
+    if retriever.load_index(args.index_file):
+        retriever.load_model()
+    else:
+        retriever.load_model()
+        retriever.build_index(batch_size=args.batch_size)
+        retriever.save_index(args.index_file) 
 
     runner = ExperimentRunner(retriever)
-    
-    target_config = next((c for c in runner.EXPERIMENT_CONFIGS if c.name == "baseline_rrf60"), None)
+
+    target_config = next((c for c in runner.EXPERIMENT_CONFIGS if c.name == "bge_optimized_v3"), None)
+
     if target_config:
         runner.run_experiment(target_config, args.output_dir)
+        
+    # baseline = next((c for c in runner.EXPERIMENT_CONFIGS if c.name == "baseline_old"), None)
+    # runner.run_experiment(baseline, args.output_dir)
 
 if __name__ == "__main__":
     main()
