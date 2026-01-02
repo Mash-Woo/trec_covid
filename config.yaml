@@ -1,0 +1,47 @@
+
+# --- Embedding Model Configuration ---
+embedding_model:
+  provider: openai
+  model_name: "text-embedding-3-large"
+
+
+# --- Weaviate Configuration ---
+weaviate:
+  connection_mode: cloud # `cloud` or `local` or `remote`
+
+  # Cloud configuration
+  cloud:
+    weaviate_api_key: "your-weaviate-api-key"
+    weaviate_url: "your-weaviate-instance.weaviate.network"
+
+  # Local configuration
+  local:
+    http_host: "127.0.0.1"
+    http_port: 8080
+    grpc_port: 50051
+
+  # Remote configuration
+  remote:
+    http_host: "192.168.169.139"
+    grpc_host: "192.168.169.139"
+    http_port: 8080
+    grpc_port: 50051
+    http_secure: False
+    grpc_secure: False
+
+
+# --- Supported Embedding Providers ---
+providers:
+  - openai:
+      models:
+        - text-embedding-3-large
+        - text-embedding-3-small
+        - text-embedding-ada-002
+  - gemini:
+      models:
+        - gemini-1.5-embedding
+        - gemini-1.0-embedding
+  - huggingface:
+      models:
+        - huggingface-1.0-embedding
+        - huggingface-1.1-embedding
