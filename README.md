@@ -62,8 +62,8 @@ Mỗi topic bao gồm:
 
 ### 2. Clone Repository
 ```bash
-git clone https://github.com/dtruong46me/trec-covid-ir-3.git
-cd trec-covid-ir-3
+git clone https://github.com/Mash-Woo/trec_covid.git
+cd trec_covid
 ```
 
 ### 3. Cài đặt Python Dependencies
