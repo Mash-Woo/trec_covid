@@ -1,3 +1,4 @@
+```mermaid
 graph TD
     %% Client Entry Point
     Client[User / Client Interface] -->|1. Search Query| FastAPI[FastAPI Server]
@@ -45,3 +46,4 @@ graph TD
     %% Output Loop
     FinalList -->|2. Top 10 Results| FastAPI
     FastAPI -->|Response| Client
+```
