@@ -1,49 +1,80 @@
 ```mermaid
-graph TD
-    %% Client Entry Point
-    Client[User / Client Interface] -->|1. Search Query| FastAPI[FastAPI Server]
+flowchart TB
+  %% --- KHAI BÁO CÁC NHÓM (SUBGRAPH) ---
+  subgraph Preprocessing ["Chunking"]
+    Step1["Clean Text"]
+    Step2["Chunking Strategy"]
+    JSONL[("Normalized Corpus")]
+  end
 
-    %% Phase 1: Offline Processing
-    subgraph Offline["Phase 1: Data Preparation (Offline)"]
-        RawData[CORD-19 Dataset] -->|Clean Text| Preproc[Preprocessing]
-        Preproc -->|Chunking Strategy| Chunker[Chunking: Paragraph + Context]
-        Chunker -->|Output| JSONL[Normalized Corpus .jsonl]
+  subgraph Offline_Process ["Preprocessing"]
+    RawData[("CORD-19 Dataset\n(Metadata + JSONs)")]
+    Preprocessing
+    
+    %% Nhánh BM25
+    Pyserini["Pyserini Indexer"]
+    Index_BM25[("BM25 Index\n(Lucene Folder)")]
+    
+    %% Nhánh SciBERT
+    SciBERT["SciBERT Model"]
+    Vector_Sci["Vectors (.npy)"]
+    Index_SciBERT[("FAISS Index\n(SciBERT)")]
+    
+    %% Nhánh BGE
+    BGE["BGE-M3 Model"]
+    Index_BGE[("FAISS / ChromaDB\n(BGE-M3)")]
+  end
 
-        %% Indexing Pipelines
-        JSONL -->|Input| Pyserini[Pyserini Indexer]
-        Pyserini -->|Build Index| IndexBM25[BM25 Index]
+  subgraph Retrieval_Layer ["Layer 1: Parallel Retrieval (Recall)"]
+    Ret_BM25[["BM25 Retriever"]]
+    Ret_SciBERT[["SciBERT Retriever"]]
+    Ret_BGE[["BGE-M3 Retriever"]]
+  end
 
-        JSONL -->|Input| SciBERT[SciBERT Model]
-        SciBERT -->|Generate Vectors| VecSci[Vectors .npy]
-        VecSci -->|Build Index| IndexSciBERT[FAISS Index SciBERT]
+  subgraph Fusion_Layer ["Layer 2: Aggregation"]
+    RRF("RRF Fusion Algorithm")
+    Candidates["Combined Candidate List"]
+  end
 
-        JSONL -->|Input| BGE[BGE-M3 Model]
-        BGE -->|Dense + Sparse| IndexBGE[FAISS / ChromaDB BGE-M3]
-    end
+  subgraph Reranking_Layer ["Layer 3: Precision (Cross-Encoder)"]
+    CrossEnc["Cross-Encoder\nBGE-Reranker"]
+    SortedList["Final Ranked List"]
+  end
 
-    %% Phase 2: Online Search System
-    subgraph Online["Phase 2: Search System (Online)"]
-        %% Retrieval Layer
-        FastAPI -->|Dispatch| RetBM25[BM25 Retriever]
-        FastAPI -->|Dispatch| RetSci[SciBERT Retriever]
-        FastAPI -->|Dispatch| RetBGE[BGE-M3 Retriever]
+  subgraph Online_Serving ["Search system"]
+    Client("User / Client Interface")
+    FastAPI["FastAPI Server"]
+    Retrieval_Layer
+    Fusion_Layer
+    Reranking_Layer
+  end
 
-        %% Index Lookups
-        IndexBM25 -.->|Lookup| RetBM25
-        IndexSciBERT -.->|Lookup| RetSci
-        IndexBGE -.->|Lookup| RetBGE
-
-        %% Fusion Layer
-        RetBM25 -->|Top 100| RRF[RRF Fusion Algorithm]
-        RetSci -->|Top 100| RRF
-        RetBGE -->|Top 100| RRF
-
-        %% Reranking Layer
-        RRF -->|Top 50-80 Candidates| CrossEnc[Cross-Encoder / BGE-Reranker]
-        CrossEnc -->|Re-scoring| FinalList[Final Ranked List]
-    end
-
-    %% Output Loop
-    FinalList -->|2. Top 10 Results| FastAPI
-    FastAPI -->|Response| Client
+  %% --- ĐỊNH NGHĨA LUỒNG DỮ LIỆU ---
+  RawData --> Step1
+  Step1 --> Step2
+  Step2 --> JSONL
+  JSONL -- Input --> Pyserini & SciBERT & BGE
+  
+  Pyserini --> Index_BM25
+  SciBERT -- Embeddings --> Vector_Sci
+  Vector_Sci --> Index_SciBERT
+  BGE -- Dense + Sparse --> Index_BGE
+  
+  Client -- "1. Search Query" --> FastAPI
+  
+  Index_BM25 -.-> Ret_BM25
+  Index_SciBERT -.-> Ret_SciBERT
+  Index_BGE -.-> Ret_BGE
+  
+  FastAPI --> Ret_BM25 & Ret_SciBERT & Ret_BGE
+  
+  Ret_BM25 -- Top 100 --> RRF
+  Ret_SciBERT -- Top 100 --> RRF
+  Ret_BGE -- Top 100 --> RRF
+  
+  RRF -- "Top 50-80" --> Candidates
+  Candidates --> CrossEnc
+  CrossEnc -- "Re-scoring" --> SortedList
+  SortedList -- Top 10 Best --> FastAPI
+  FastAPI -- "2. Return Response" --> Client
 ```
