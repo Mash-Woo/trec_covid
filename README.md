@@ -79,5 +79,3 @@ flowchart TB
   SortedList -- Top 10 Best --> FastAPI
   FastAPI -- "2. Return Response" --> Client
 ```
-
-Xem giúp tôi sao chữ trong sơ đồ kiến trúc hệ thống cứ bị mất
