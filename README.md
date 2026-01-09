@@ -17,7 +17,7 @@ flowchart TB
     Index_BM25[("BM25 Index\n(Lucene Folder)")]
     
     %% Nhánh SciBERT
-    SciBERT["SciBERT Model"]
+    SciBERT["SciBERT"]
     Vector_Sci["Vectors (.npy)"]
     Index_SciBERT[("FAISS Index\n(SciBERT)")]
     
@@ -26,18 +26,18 @@ flowchart TB
     Index_BGE[("FAISS / ChromaDB\n(BGE-M3)")]
   end
 
-  subgraph Retrieval_Layer ["Layer 1: Parallel Retrieval (Recall)"]
+  subgraph Retrieval_Layer ["Parallel Retrieval (Recall)"]
     Ret_BM25[["BM25 Retriever"]]
     Ret_SciBERT[["SciBERT Retriever"]]
     Ret_BGE[["BGE-M3 Retriever"]]
   end
 
-  subgraph Fusion_Layer ["Layer 2: Aggregation"]
+  subgraph Fusion_Layer ["Aggregation"]
     RRF("RRF Fusion Algorithm")
     Candidates["Combined Candidate List"]
   end
 
-  subgraph Reranking_Layer ["Layer 3: Precision (Cross-Encoder)"]
+  subgraph Reranking_Layer ["Precision (Cross-Encoder)"]
     CrossEnc["Cross-Encoder\nBGE-Reranker"]
     SortedList["Final Ranked List"]
   end
@@ -69,11 +69,11 @@ flowchart TB
   
   FastAPI --> Ret_BM25 & Ret_SciBERT & Ret_BGE
   
-  Ret_BM25 -- Top 100 --> RRF
-  Ret_SciBERT -- Top 100 --> RRF
-  Ret_BGE -- Top 100 --> RRF
+  Ret_BM25 -- Top_100 --> RRF
+  Ret_SciBERT -- Top_100 --> RRF
+  Ret_BGE -- Top_100 --> RRF
   
-  RRF -- "Top 50-80" --> Candidates
+  RRF -- "Top_50-80" --> Candidates
   Candidates --> CrossEnc
   CrossEnc -- "Re-scoring" --> SortedList
   SortedList -- Top 10 Best --> FastAPI
