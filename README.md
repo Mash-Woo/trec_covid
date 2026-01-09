@@ -1,5 +1,5 @@
 graph TD
-    %% Client / Entry Point
+    %% Client Entry Point
     Client[User / Client Interface] -->|1. Search Query| FastAPI[FastAPI Server]
 
     %% Phase 1: Offline Processing
@@ -27,7 +27,7 @@ graph TD
         FastAPI -->|Dispatch| RetSci[SciBERT Retriever]
         FastAPI -->|Dispatch| RetBGE[BGE-M3 Retriever]
 
-        %% Index Lookups (Dependency)
+        %% Index Lookups
         IndexBM25 -.->|Lookup| RetBM25
         IndexSciBERT -.->|Lookup| RetSci
         IndexBGE -.->|Lookup| RetBGE
